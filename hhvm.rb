@@ -54,6 +54,8 @@ class Hhvm < Formula
   depends_on "sqlite"
   depends_on "tbb"
 
+  patch :DATA
+  
   def install
     # Work around https://github.com/Homebrew/homebrew/issues/42957 by making
     # brew's superenv forget which libraries it wants to inject into ld
@@ -143,3 +145,63 @@ class Hhvm < Formula
     system "#{bin}/hhvm", testpath/"test.php"
   end
 end
+
+__END__
+diff --git a/hphp/runtime/ext/fb/ext_fb.cpp b/hphp/runtime/ext/fb/ext_fb.cpp
+index a30331b..05cdb85 100644
+--- a/hphp/runtime/ext/fb/ext_fb.cpp
++++ b/hphp/runtime/ext/fb/ext_fb.cpp
+@@ -50,6 +50,22 @@
+ 
+ #include "hphp/parser/parser.h"
+ 
++#include <arpa/inet.h>
++#if defined(__FreeBSD__)
++# include <sys/endian.h>
++#elif defined(__APPLE__)
++# include <machine/endian.h>
++# include <libkern/OSByteOrder.h>
++#elif defined(_MSC_VER)
++# include <stdlib.h>
++#else
++# include <byteswap.h>
++# include <map>
++# include <memory>
++# include <utility>
++# include <vector>
++#endif
++
+ namespace HPHP {
+ 
+ ///////////////////////////////////////////////////////////////////////////////
+@@ -94,6 +110,29 @@ const StaticString
+ #endif
+ #endif
+ 
++#if !defined(htonll) && !defined(ntohll)
++
++#if __BYTE_ORDER == __LITTLE_ENDIAN
++# if defined(__FreeBSD__)
++#  define htonll(x) bswap64(x)
++#  define ntohll(x) bswap64(x)
++# elif defined(__APPLE__)
++#  define htonll(x) OSSwapInt64(x)
++#  define ntohll(x) OSSwapInt64(x)
++# elif defined(_MSC_VER)
++#  define htonll(x) _byteswap_uint64(x)
++#  define ntohll(x) _byteswap_uint64(x)
++# else
++#  define htonll(x) bswap_64(x)
++#  define ntohll(x) bswap_64(x)
++# endif
++#else
++# define htonll(x) (x)
++# define ntohll(x) (x)
++#endif
++
++#endif
++
+ /* enum of thrift types */
+ enum TType {
+   T_STOP    = 1,
+
